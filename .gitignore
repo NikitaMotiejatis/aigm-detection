@@ -1,0 +1,10 @@
+data/
+mlruns/
+outputs/
+.venv/
+__pycache__/
+*.pyc
+.env
+private/
+CLAUDE.md
+.env
