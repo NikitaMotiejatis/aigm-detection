@@ -8,3 +8,5 @@ __pycache__/
 private/
 CLAUDE.md
 .env
+cookies.txt
+*cookies*.txt

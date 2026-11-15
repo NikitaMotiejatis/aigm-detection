@@ -32,7 +32,7 @@ fakemusiccaps() {
 }
 
 musiccaps() {
-    uv run scripts/fetch_musiccaps.py --out "$DATA_DIR/musiccaps"
+    uv run scripts/fetch_musiccaps.py --out "$DATA_DIR/musiccaps" --workers 6 --sleep 2
 }
 
 fma() { # small | medium

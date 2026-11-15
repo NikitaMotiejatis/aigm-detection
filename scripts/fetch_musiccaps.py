@@ -11,6 +11,7 @@ are region-blocked are skipped and listed in <out>/failed.csv.
 Usage:
     uv run scripts/fetch_musiccaps.py --out data/raw/musiccaps
     uv run scripts/fetch_musiccaps.py --out data/raw/musiccaps --limit 5   # smoke test
+    uv run scripts/fetch_musiccaps.py --cookies cookies.txt --workers 2 --sleep 2   # if YouTube asks "confirm you're not a bot"
 
 Files are named <ytid>.wav, the same naming FakeMusicCaps uses for generated clips.
 ffmpeg is taken from the imageio-ffmpeg package, no system install is needed.
@@ -56,7 +57,7 @@ def ffmpeg_dir() -> str:
     return str(link_dir)
 
 
-def fetch(row: dict, out: Path, sample_rate: int, ffmpeg: str) -> tuple[str, str]:
+def fetch(row: dict, out: Path, sample_rate: int, ffmpeg: str, auth: dict) -> tuple[str, str]:
     ytid = row["ytid"]
     target = out / f"{ytid}.wav"
     if target.exists() and target.stat().st_size > 0:
@@ -74,6 +75,7 @@ def fetch(row: dict, out: Path, sample_rate: int, ffmpeg: str) -> tuple[str, str
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
         "postprocessor_args": {"extractaudio": ["-ar", str(sample_rate)]},
         "retries": 3,
+        **auth,
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -89,7 +91,22 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=None, help="only the first N clips")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--sample-rate", type=int, default=44100)
+    ap.add_argument("--cookies", type=Path, default=None,
+                    help="Netscape-format cookies.txt exported from a logged-in YouTube session")
+    ap.add_argument("--cookies-from-browser", default=None,
+                    help="read cookies straight from a browser, e.g. firefox or chrome")
+    ap.add_argument("--sleep", type=float, default=0,
+                    help="seconds to wait between requests, which lowers the chance of a bot check")
     args = ap.parse_args()
+
+    auth: dict = {}
+    if args.cookies:
+        auth["cookiefile"] = str(args.cookies)
+    if args.cookies_from_browser:
+        auth["cookiesfrombrowser"] = (args.cookies_from_browser,)
+    if args.sleep:
+        auth["sleep_interval_requests"] = args.sleep
+        auth["sleep_interval"] = args.sleep
 
     args.out.mkdir(parents=True, exist_ok=True)
     rows = load_rows(args.out / "musiccaps-public.csv")
@@ -100,7 +117,7 @@ def main() -> int:
     counts = {"ok": 0, "exists": 0, "failed": 0}
     failed: list[tuple[str, str]] = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        jobs = pool.map(lambda r: fetch(r, args.out, args.sample_rate, ffmpeg), rows)
+        jobs = pool.map(lambda r: fetch(r, args.out, args.sample_rate, ffmpeg, auth), rows)
         for i, (ytid, status) in enumerate(jobs, 1):
             key = status.split(":")[0]
             counts[key] += 1
