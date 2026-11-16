@@ -11,3 +11,10 @@ CLAUDE.md
 cookies.txt
 *cookies*.txt
 thesis
+aigm-detection-private/
+mlflow-data/
+mlflow-mirror/
+models/
+outbox/
+.pytest_cache/
+.ruff_cache/

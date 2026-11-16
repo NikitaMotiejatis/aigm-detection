@@ -11,7 +11,8 @@ are region-blocked are skipped and listed in <out>/failed.csv.
 Usage:
     uv run scripts/fetch_musiccaps.py --out data/raw/musiccaps
     uv run scripts/fetch_musiccaps.py --out data/raw/musiccaps --limit 5   # smoke test
-    uv run scripts/fetch_musiccaps.py --cookies cookies.txt --workers 2 --sleep 2   # if YouTube asks "confirm you're not a bot"
+    # if YouTube asks "confirm you're not a bot":
+    uv run scripts/fetch_musiccaps.py --cookies cookies.txt --workers 2 --sleep 2
 
 Files are named <ytid>.wav, the same naming FakeMusicCaps uses for generated clips.
 ffmpeg is taken from the imageio-ffmpeg package, no system install is needed.
@@ -20,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import io
 import os
 import sys
 import urllib.request
@@ -39,7 +39,7 @@ def load_rows(csv_path: Path) -> list[dict]:
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         with urllib.request.urlopen(CSV_URL) as resp:
             csv_path.write_bytes(resp.read())
-    with io.open(csv_path, newline="", encoding="utf-8") as f:
+    with open(csv_path, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
