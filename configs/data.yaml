@@ -1,0 +1,31 @@
+# Data layer settings (PLAN.md decisions 1, 2, 5, 12). Changing anything under `audio`
+# changes the bytes of the processed cache, which is built once on machine A.
+raw_dir: ${oc.env:DATA_DIR,data/raw}
+processed_dir: ${oc.env:PROCESSED_DIR,data/processed}
+
+audio:
+  sample_rate: 16000
+  clip_seconds: 10
+  resample_quality: VHQ        # soxr; skipped for input that is already at sample_rate
+  lowpass:                     # one linear-phase FIR applied to every clip of every source
+    passband_hz: 7000          # flat up to here; mel features stop here
+    stopband_hz: 7400          # attenuation_db reached from here; -6 dB point at 7.2 kHz
+    attenuation_db: 96
+  # Audit of 2026-11-17 (results/audit.csv): mean RMS differs by source and generator by
+  # several dB (MusicCaps -18.1 dBFS, FakeMusicCaps generators -18.7 to -22.9, Echoes
+  # generators -9.1 to -21.4), so every clip is scaled to one RMS level.
+  normalise_rms: true
+  rms_target_dbfs: -20
+
+windows:
+  fma_small: {count: 3, min_seconds: 29.5}   # shorter tracks are skipped and listed
+  echoes: {count: 6, min_seconds: 0}         # tracks under 10 s are zero-padded
+
+audit:
+  clips_per_group: 500
+  seed: 0
+
+splits:
+  dir: splits
+  seed: 0
+  fractions: {train: 0.8, val: 0.1, test: 0.1}

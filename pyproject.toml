@@ -19,6 +19,7 @@ dependencies = [
     "pedalboard",
     "imageio-ffmpeg",
     "matplotlib",
+    "scipy>=1.18.1",
 ]
 
 [project.scripts]

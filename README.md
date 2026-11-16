@@ -6,9 +6,10 @@ Code for the course work "Detecting AI-Generated Music Using Neural Networks"
 This guide covers three things: setting up a machine, downloading the datasets, and running the
 experiments. The thesis text itself lives outside this repository (Overleaf / `thesis/` folder).
 
-**Status (2026-11-16):** setup and dataset download work, and the Python package skeleton
-exists (section 4). The training pipeline and the experiments are not implemented yet; section 5
-describes what is planned so that both of us build towards the same interface.
+**Status (2026-11-17):** setup, dataset download and the data layer (audit, conversion to the
+processed cache, splits, checksums) work; see section 4. Training and the experiments are not
+implemented yet; section 5 describes what is planned so that both of us build towards the same
+interface.
 
 ## 1. Machine setup
 
@@ -100,9 +101,35 @@ The thesis is a LaTeX project (class `VUMIFPSkursinis.cls`, entry point `main.te
 
 ```bash
 uv sync                # creates .venv with all dependencies (PyTorch included, several GB)
-uv run aigm --help     # the command-line entry point; it has no subcommands yet
-make lint test         # ruff and pytest
+uv run aigm --help     # the command-line entry point
+make lint test         # ruff and pytest (synthetic audio, no datasets needed)
 ```
+
+### Data layer
+
+Settings are in `configs/data.yaml`; any of them can be overridden as `key=value` after a
+command. Models never read the raw files: every source is converted once into a cache of
+16 kHz mono 10-second clips (`data/processed/`, about 27 GB) that all later steps read.
+
+```bash
+uv run aigm audit            # statistics and mean spectra of the raw audio -> results/
+uv run aigm prepare all      # machine A only: build the cache (refuses to replace an existing one)
+uv run aigm make-splits      # machine A only: write splits/*.csv and splits/SPLITS.md
+uv run aigm data manifest    # machine A only: write splits/CACHE.sha256
+uv run aigm data verify      # either machine: compare data/processed/ with splits/CACHE.sha256
+scripts/export_cache.sh /mnt/e/aigm-detection   # machine A: copy the cache to the external disk
+```
+
+Conversion: decode, mix to mono, resample to 16 kHz, cut into 10 s clips, apply one low-pass
+(flat to 7.0 kHz, fully attenuated from 7.4 kHz) to every clip of every source, scale to
+-20 dBFS RMS, store as 16-bit. FakeMusicCaps and MusicCaps give one clip per file, FMA small
+three per track, Echoes up to six per track.
+
+**Machine B** does not download or convert anything. Copy `processed/` from the external disk
+to `data/processed/` and run `uv run aigm data verify`; it must print `OK`.
+
+The split files in `splits/` are part of the repository and are never regenerated;
+`splits/SPLITS.md` lists what is in them.
 
 ## 5. Experiments (planned, not implemented yet)
 

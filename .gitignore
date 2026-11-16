@@ -18,3 +18,6 @@ models/
 outbox/
 .pytest_cache/
 .ruff_cache/
+
+
+!src/aigm/data
