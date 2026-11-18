@@ -61,6 +61,11 @@ Two machines are used: an RTX 4070 SUPER (12 GB) and an RTX 3070 Laptop (8 GB).
    `%UserProfile%\.wslconfig`. On A, stop Windows from sleeping while plugged in
    (*Settings → System → Power*, or `powercfg /change standby-timeout-ac 0` in PowerShell).
 
+   To access MLflow server from browser that is outside WSL, Tailscale should be installed on 
+   Windows as well. 
+
+   MLflow server is accessible via this url: [http:/aigm-a:5000](http:/aigm-a:5000)
+
 ## 2. Datasets
 
 All data goes to `data/raw/` (ignored by git). Set `DATA_DIR=/some/path` to store it elsewhere.
