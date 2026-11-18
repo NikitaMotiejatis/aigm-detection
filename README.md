@@ -46,6 +46,21 @@ Two machines are used: an RTX 4070 SUPER (12 GB) and an RTX 3070 Laptop (8 GB).
    cd ~ && git clone git@github.com:NikitaMotiejatis/aigm-detection.git && cd aigm-detection
    ```
 
+5. **Network (Tailscale).** Both machines join one tailnet so that B reaches A's MLflow server
+   under the fixed name `aigm-a`. Install inside Ubuntu (WSL 2 on Ubuntu 24.04 runs systemd,
+   which `tailscaled` needs):
+
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up --hostname=aigm-a     # on A; use --hostname=aigm-b on B
+   tailscale status                        # both machines must be listed
+   ```
+
+   MagicDNS must be on (the default) so that `aigm-a` resolves. If Tailscale inside WSL gives
+   trouble, install it on Windows instead and set `networkingMode=mirrored` under `[wsl2]` in
+   `%UserProfile%\.wslconfig`. On A, stop Windows from sleeping while plugged in
+   (*Settings → System → Power*, or `powercfg /change standby-timeout-ac 0` in PowerShell).
+
 ## 2. Datasets
 
 All data goes to `data/raw/` (ignored by git). Set `DATA_DIR=/some/path` to store it elsewhere.
@@ -130,6 +145,23 @@ to `data/processed/` and run `uv run aigm data verify`; it must print `OK`.
 
 The split files in `splits/` are part of the repository and are never regenerated;
 `splits/SPLITS.md` lists what is in them.
+
+### Tracking server (machine A)
+
+One MLflow server, on A, holds all runs, artifacts and the model registry (`compose.yaml`).
+Its data is stored in `mlflow-data/` (SQLite database and artifact folder, not in git).
+
+```bash
+make mlflow-up      # start it; restarts by itself after a crash or reboot of A
+make mlflow-down    # stop it (runs are kept)
+```
+
+The UI and API are at `http://localhost:5000` on A and at `http://aigm-a:5000` from B over
+Tailscale. Code finds the server through `MLFLOW_TRACKING_URI`, e.g.
+`export MLFLOW_TRACKING_URI=http://aigm-a:5000` on B. No login is configured: port 5000 must
+stay reachable only from the tailnet. The server accepts only the host names `localhost`,
+`aigm-a` (with or without the tailnet domain) and tailnet addresses (`100.*`); add others to
+`--allowed-hosts` in `compose.yaml`.
 
 ## 5. Experiments (planned, not implemented yet)
 
