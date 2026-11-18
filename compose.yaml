@@ -1,5 +1,5 @@
-# MLflow tracking server and model registry, machine A only (PLAN.md WP3 step 3).
-# Runs and artifacts live in mlflow-data/; B reaches the server over Tailscale as http://aigm-a:5000.
+# Local MLflow tracking server (fallback / testing). The shared server runs on the Proxmox host,
+# see deploy/mlflow/ and README "Tracking server".
 services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.18.0  # keep equal to the mlflow version in uv.lock

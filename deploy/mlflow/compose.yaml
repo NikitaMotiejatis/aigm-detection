@@ -1,0 +1,19 @@
+# MLflow tracking server and model registry on the Proxmox LXC container `aigm-mlflow`
+# (copy of /opt/mlflow on that container; see README "Tracking server").
+# Docker listens on localhost only; `tailscale serve --bg 5000` publishes it to the tailnet as
+# https://aigm-mlflow.<tailnet>.ts.net, so nothing outside the tailnet can reach it.
+services:
+  mlflow:
+    build: .
+    image: aigm-mlflow:3.18.0-x86v1   # mlflow version must stay equal to the one in uv.lock
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - /srv/mlflow:/mlflow           # separate Proxmox mount point (mp0, backup=1)
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --serve-artifacts --artifacts-destination /mlflow/artifacts
+      --allowed-hosts localhost*,127.0.0.1*,aigm-mlflow,aigm-mlflow:*,aigm-mlflow.*

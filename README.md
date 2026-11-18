@@ -6,10 +6,10 @@ Code for the course work "Detecting AI-Generated Music Using Neural Networks"
 This guide covers three things: setting up a machine, downloading the datasets, and running the
 experiments. The thesis text itself lives outside this repository (Overleaf / `thesis/` folder).
 
-**Status (2026-11-17):** setup, dataset download and the data layer (audit, conversion to the
-processed cache, splits, checksums) work; see section 4. Training and the experiments are not
-implemented yet; section 5 describes what is planned so that both of us build towards the same
-interface.
+**Status (2026-11-19):** setup, dataset download, the data layer (audit, conversion to the
+processed cache, splits, checksums) and the shared MLflow tracking server on the Proxmox host
+work; see section 4. Training and the experiments are not implemented yet; section 5 describes
+what is planned so that both of us build towards the same interface.
 
 ## 1. Machine setup
 
@@ -46,25 +46,20 @@ Two machines are used: an RTX 4070 SUPER (12 GB) and an RTX 3070 Laptop (8 GB).
    cd ~ && git clone git@github.com:NikitaMotiejatis/aigm-detection.git && cd aigm-detection
    ```
 
-5. **Network (Tailscale).** Both machines join one tailnet so that B reaches A's MLflow server
-   under the fixed name `aigm-a`. Install inside Ubuntu (WSL 2 on Ubuntu 24.04 runs systemd,
-   which `tailscaled` needs):
+5. **Network (Tailscale).** Both machines join one tailnet so that they reach the MLflow server
+   (section 4, *Tracking server*) under the fixed name `aigm-mlflow`. Install inside Ubuntu
+   (WSL 2 on Ubuntu 24.04 runs systemd, which `tailscaled` needs):
 
    ```bash
    curl -fsSL https://tailscale.com/install.sh | sh
    sudo tailscale up --hostname=aigm-a     # on A; use --hostname=aigm-b on B
-   tailscale status                        # both machines must be listed
+   tailscale status                        # aigm-a, aigm-b and aigm-mlflow must be listed
    ```
 
-   MagicDNS must be on (the default) so that `aigm-a` resolves. If Tailscale inside WSL gives
+   MagicDNS must be on (the default) so that the names resolve. If Tailscale inside WSL gives
    trouble, install it on Windows instead and set `networkingMode=mirrored` under `[wsl2]` in
-   `%UserProfile%\.wslconfig`. On A, stop Windows from sleeping while plugged in
-   (*Settings → System → Power*, or `powercfg /change standby-timeout-ac 0` in PowerShell).
-
-   To access MLflow server from browser that is outside WSL, Tailscale should be installed on 
-   Windows as well. 
-
-   MLflow server is accessible via this url: [http:/aigm-a:5000](http:/aigm-a:5000)
+   `%UserProfile%\.wslconfig`. To open the MLflow UI in a Windows browser, Tailscale must be
+   installed on Windows as well; with it only inside WSL, `curl` works but the browser does not.
 
 ## 2. Datasets
 
@@ -151,22 +146,60 @@ to `data/processed/` and run `uv run aigm data verify`; it must print `OK`.
 The split files in `splits/` are part of the repository and are never regenerated;
 `splits/SPLITS.md` lists what is in them.
 
-### Tracking server (machine A)
+### Tracking server
 
-One MLflow server, on A, holds all runs, artifacts and the model registry (`compose.yaml`).
-Its data is stored in `mlflow-data/` (SQLite database and artifact folder, not in git).
+One MLflow server holds all runs, artifacts and the model registry. It runs in an unprivileged
+LXC container (`aigm-mlflow`, Debian 12) on a Proxmox host that is always on, so it does not
+depend on A or B being awake. Its files are in `deploy/mlflow/` (a copy of `/opt/mlflow` in the
+container); its data is on the container's mount point `/srv/mlflow` (SQLite database and
+artifact folder), which is included in Proxmox backups.
+
+Code finds the server through `MLFLOW_TRACKING_URI`; set it on both machines (e.g. in
+`~/.bashrc`), with `<tailnet>` replaced by the tailnet's domain shown by `tailscale status`:
 
 ```bash
-make mlflow-up      # start it; restarts by itself after a crash or reboot of A
+export MLFLOW_TRACKING_URI=https://aigm-mlflow.<tailnet>.ts.net
+curl -s $MLFLOW_TRACKING_URI/health      # prints OK
+```
+
+The same URL opens the UI in a browser. No login is configured: MLflow listens on `localhost`
+inside the container only, and `tailscale serve` publishes it to the tailnet with HTTPS, so it is
+not reachable from the host's LAN.
+
+**Maintenance** (inside the container: `pct enter <id>` on the Proxmox host, or
+`ssh root@aigm-mlflow` through Tailscale SSH):
+
+```bash
+cd /opt/mlflow
+docker compose up -d --build     # start or update; restarts by itself after a crash or reboot
+docker compose logs --tail=50    # if the UI or /health stops answering
+tailscale serve status           # must show https://aigm-mlflow.<tailnet>.ts.net -> 127.0.0.1:5000
+```
+
+**Old CPU.** The Proxmox host has an Intel Core 2 Duo (x86-64-v1, no SSE4.2/AVX). The official
+MLflow image crashes on it at start-up with exit code 132 (illegal instruction), because current
+numpy and all pyarrow wheels use newer instructions. `deploy/mlflow/Dockerfile` therefore pins
+`numpy<2.4` and removes pyarrow, which the tracking server does not need. If the container ever
+shows `Restarting (132)` again, a newly loaded library has the same problem. When MLflow is
+upgraded, change the version in `uv.lock` and in the `FROM` line together.
+
+**Container setup** (once, on the Proxmox host): unprivileged container with
+`features: nesting=1,keyctl=1` (for Docker), `/dev/net/tun` passed in (`pct set <id> --dev0
+/dev/net/tun`, for Tailscale), a mount point `mp0: …,mp=/srv/mlflow,backup=1` and
+`onboot: 1`. Inside: Docker (`get.docker.com`), Tailscale (`tailscale up --hostname=aigm-mlflow
+--ssh`, key expiry disabled in the admin console), `tailscale serve --bg 5000` (needs MagicDNS
+and HTTPS certificates enabled for the tailnet), then the files from `deploy/mlflow/` in
+`/opt/mlflow`.
+
+**Local server.** The `compose.yaml` in the repository root starts a separate MLflow server on
+the machine it runs on (data in `mlflow-data/`), for testing without the shared server:
+
+```bash
+make mlflow-up      # http://localhost:5000; set MLFLOW_TRACKING_URI=http://localhost:5000
 make mlflow-down    # stop it (runs are kept)
 ```
 
-The UI and API are at `http://localhost:5000` on A and at `http://aigm-a:5000` from B over
-Tailscale. Code finds the server through `MLFLOW_TRACKING_URI`, e.g.
-`export MLFLOW_TRACKING_URI=http://aigm-a:5000` on B. No login is configured: port 5000 must
-stay reachable only from the tailnet. The server accepts only the host names `localhost`,
-`aigm-a` (with or without the tailnet domain) and tailnet addresses (`100.*`); add others to
-`--allowed-hosts` in `compose.yaml`.
+Runs logged there stay on that machine and are not part of the shared results.
 
 ## 5. Experiments (planned, not implemented yet)
 
@@ -180,6 +213,6 @@ stay reachable only from the tailnet. The server accepts only the host names `lo
 | 6 | Attribution analysis (Grad-CAM, Integrated Gradients, Occlusion) of failure cases | failures from 2, 4, 5 |
 
 Planned pipeline: every run is a container started with `docker run --gpus all` that logs
-parameters, metrics and the model to one MLflow server. The 12 GB machine trains and hosts
-MLflow; the 8 GB machine reaches it over Tailscale and runs evaluation and attribution. Commands
+parameters, metrics and the model to one MLflow server. The 12 GB machine trains; the 8 GB
+machine runs evaluation and attribution; both reach MLflow on the Proxmox host over Tailscale. Commands
 for starting the stack and launching runs will be documented here once they exist.
