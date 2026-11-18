@@ -1,0 +1,16 @@
+# Local MLflow tracking server (fallback / testing). The shared server runs on the Proxmox host,
+# see deploy/mlflow/ and README "Tracking server".
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.18.0  # keep equal to the mlflow version in uv.lock
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow-data:/mlflow
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --serve-artifacts --artifacts-destination /mlflow/artifacts
+      --allowed-hosts localhost*,127.0.0.1*,aigm-a,aigm-a:*,aigm-a.*,100.*

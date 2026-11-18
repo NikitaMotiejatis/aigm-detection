@@ -18,6 +18,7 @@ models/
 outbox/
 .pytest_cache/
 .ruff_cache/
+graphify-out/
 
 
 !src/aigm/data
