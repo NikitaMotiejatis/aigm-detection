@@ -1,0 +1,17 @@
+# What `make submit EXP=<name>` runs: every variant with every seed.
+# `slots` is how many runs share the GPU at once; raise it only after measuring GPU memory.
+smoke:
+  config: configs/smoke.yaml
+  seeds: [0, 1, 2]
+  slots: 1
+  variants:
+    - []
+
+e1_indomain:
+  config: configs/e1_indomain.yaml
+  seeds: [0, 1, 2]
+  slots: 1
+  variants:
+    - [model.name=resnet18]
+    - [model.name=mobilenet_v2]
+    - [model.name=smallcnn, model.pretrained=false]
