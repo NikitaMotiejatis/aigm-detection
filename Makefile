@@ -3,7 +3,7 @@ GIT_DIRTY := $(shell test -n "$$(git status --porcelain)" && echo true || echo f
 IMAGE_TAG := $(shell git rev-parse --short=12 HEAD)$(if $(filter true,$(GIT_DIRTY)),-dirty)
 IMAGE := aigm:$(IMAGE_TAG)
 
-.PHONY: lint test image submit mlflow-up mlflow-down
+.PHONY: lint test image submit mlflow-up mlflow-down mlflow-mirror mlflow-mirror-down
 
 lint:
 	uv run ruff check .
@@ -24,3 +24,9 @@ mlflow-up:
 
 mlflow-down:
 	docker compose down
+
+mlflow-mirror:
+	docker compose --profile mirror up -d mlflow-mirror
+
+mlflow-mirror-down:
+	docker compose --profile mirror rm -sf mlflow-mirror
