@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.8"
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check .
+      - run: uv run --frozen pytest -q
+      - name: Smoke training run
+        env:
+          MLFLOW_TRACKING_URI: sqlite:///ci-mlflow.db
+        run: uv run --frozen aigm train --config configs/smoke.yaml
+
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk space for the PyTorch layers
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Build the image (not pushed)
+        run: >
+          docker build
+          --build-arg GIT_COMMIT=${{ github.sha }}
+          --build-arg GIT_DIRTY=false
+          --build-arg IMAGE_TAG=ci
+          -t aigm:ci .
+      - run: docker run --rm aigm:ci --help
