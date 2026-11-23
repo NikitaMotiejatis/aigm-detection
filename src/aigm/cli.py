@@ -82,9 +82,36 @@ def _train(args: argparse.Namespace) -> int:
 def _eval(args: argparse.Namespace) -> int:
     from aigm.evaluate import evaluate_run
 
-    result = evaluate_run(args.run_id, args.testset, args.testsets, args.overrides)
+    result = evaluate_run(args.run_id, args.testset, args.testsets, args.overrides, args.model)
     for name, value in result.items():
         print(f"{name}: {value:.6f}")
+    return 0
+
+
+def _pull(_: argparse.Namespace) -> int:
+    from aigm import tracking
+
+    if not tracking.server_reachable():
+        print("MLflow server not reachable; the local model cache is unchanged")
+        return 1
+    pulled = tracking.pull()
+    print(f"pulled: {', '.join(pulled)}" if pulled else "model cache is up to date")
+    return 0
+
+
+def _sync(_: argparse.Namespace) -> int:
+    from aigm import tracking
+
+    uploaded, pending = tracking.sync()
+    print(f"outbox: {uploaded} uploaded, {pending} pending")
+    return 1 if pending else 0
+
+
+def _register(args: argparse.Namespace) -> int:
+    from aigm import tracking
+
+    for name, (run_id, version) in tracking.register_best(args.experiment, args.suffix).items():
+        print(f"{name} version {version}: run {run_id}")
     return 0
 
 
@@ -136,11 +163,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(run=_train)
 
     p = sub.add_parser("eval", help="evaluate a run's checkpoint on a named test set")
-    p.add_argument("--run", dest="run_id", required=True, help="MLflow run id of training")
+    which = p.add_mutually_exclusive_group(required=True)
+    which.add_argument("--run", dest="run_id", help="MLflow run id of training")
+    which.add_argument("--model", help="registry model, `name` or `name/version`")
     p.add_argument("--testset", required=True)
     p.add_argument("--testsets", default="configs/testsets.yaml")
     p.add_argument("overrides", nargs="*", metavar="key=value", help="config overrides")
     p.set_defaults(run=_eval)
+
+    p = sub.add_parser("pull", help="cache the current registry models locally")
+    p.set_defaults(run=_pull)
+    p = sub.add_parser("sync", help="upload results waiting in the outbox")
+    p.set_defaults(run=_sync)
+    p = sub.add_parser("register", help="register the best run per model of an experiment")
+    p.add_argument("experiment")
+    p.add_argument("--suffix", required=True, help="dataset part of the name, e.g. fmc")
+    p.set_defaults(run=_register)
     return parser
 
 

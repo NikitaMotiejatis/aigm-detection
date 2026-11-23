@@ -7,7 +7,6 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
-import mlflow
 import numpy as np
 import pandas as pd
 import torch
@@ -37,12 +36,18 @@ def metrics_for(clips: pd.DataFrame, threshold: float, n_boot: int, seed: int) -
 
 
 def evaluate_run(
-    run_id: str,
+    run_id: str | None,
     testset: str,
     testsets_file: str | Path = "configs/testsets.yaml",
     overrides: Sequence[str] = (),
+    model_name: str | None = None,
 ) -> dict[str, float]:
-    local = mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="model/best.pt")
+    """Evaluate a run or a registry model. The result goes through the outbox (WP3 step 5)."""
+    tracking.pull()
+    if model_name:
+        local, run_id = tracking.cached_model(model_name)
+    else:
+        local = tracking.run_checkpoint(run_id)
     checkpoint = torch.load(local, map_location="cpu", weights_only=True)
     cfg = OmegaConf.create(checkpoint["config"])
     if not cfg.data.get("synthetic", False):  # the cache location belongs to this machine
@@ -74,15 +79,19 @@ def evaluate_run(
     threshold = float(checkpoint["val_threshold"])
     result = metrics_for(clips, threshold, int(cfg.eval.n_boot), int(cfg.seed))
 
-    mlflow.set_experiment(cfg.experiment)
     tags = tracking.run_tags("eval", device, cache_hash, files)
     tags |= {"eval_of": run_id, "testset": testset, "experiment_name": cfg.experiment}
-    with mlflow.start_run(run_name=f"eval-{testset}-{run_id[:8]}", tags=tags), \
-            tempfile.TemporaryDirectory() as tmp:  # fmt: skip
-        mlflow.log_params({"testset": testset, "source_run": run_id, "val_threshold": threshold,
-                           "checkpoint_epoch": checkpoint["epoch"]})  # fmt: skip
-        tracking.log_finite({k: v for k, v in result.items() if np.isscalar(v)})
+    if model_name:
+        tags["registry_model"] = model_name
+    params = {"testset": testset, "source_run": run_id, "val_threshold": threshold,
+              "checkpoint_epoch": checkpoint["epoch"]}  # fmt: skip
+    with tempfile.TemporaryDirectory() as tmp:
         scores = Path(tmp) / f"{testset}.csv"
         clips.to_csv(scores, index=False)
-        mlflow.log_artifact(str(scores), "scores")
+        metrics = {k: v for k, v in result.items() if np.isscalar(v)}
+        entry = tracking.write_outbox(cfg.experiment, f"eval-{testset}-{run_id[:8]}", tags, params,
+                                      metrics, {"scores": scores})  # fmt: skip
+    uploaded, pending = tracking.sync()
+    hint = f" (run `aigm sync` later; newest: {entry.name})" if pending else ""
+    print(f"outbox: {uploaded} uploaded, {pending} pending{hint}", flush=True)
     return result
