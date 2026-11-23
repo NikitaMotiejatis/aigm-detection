@@ -146,6 +146,21 @@ to `data/processed/` and run `uv run aigm data verify`; it must print `OK`.
 The split files in `splits/` are part of the repository and are never regenerated;
 `splits/SPLITS.md` lists what is in them.
 
+### Training and evaluation
+
+```bash
+uv run aigm train --config configs/smoke.yaml     # small CNN, 64 synthetic clips, CPU, no dataset
+uv run aigm train --config configs/e1_indomain.yaml seed=1
+uv run aigm train --config configs/e1_indomain.yaml model.name=mobilenet_v2
+uv run aigm train --config configs/e1_indomain.yaml model.name=smallcnn model.pretrained=false
+uv run aigm eval --run <mlflow run id> --testset fmc_test
+```
+
+Set `MLFLOW_TRACKING_URI` first, otherwise runs go to a local MLflow store. Test sets are named in
+`configs/testsets.yaml`. Scores are log-odds of "generated"; clip scores are averaged per track
+before metrics are computed, and accuracy and F1 use the threshold of the validation EER. A run
+started from a working tree with uncommitted changes is tagged `dirty=true`.
+
 ### Tracking server
 
 One MLflow server holds all runs, artifacts and the model registry. It runs in an unprivileged

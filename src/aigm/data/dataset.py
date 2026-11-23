@@ -49,12 +49,14 @@ class ClipDataset(Dataset):
         self.processed_dir = Path(processed_dir)
         rows = []
         for source, part in table.groupby("source", sort=False):
-            index = read_index(self.processed_dir, source).set_index("clip_id")["row"]
+            index = read_index(self.processed_dir, source).set_index("clip_id")
             missing = part.loc[~part["clip_id"].isin(index.index), "clip_id"]
             if len(missing):
                 raise KeyError(f"{len(missing)} clips of '{source}' are in the split but not "
                                f"in the cache, e.g. {missing.iloc[0]}")  # fmt: skip
-            rows.append(part.assign(row=index.loc[part["clip_id"]].to_numpy()))
+            found = index.loc[part["clip_id"]]
+            rows.append(part.assign(row=found["row"].to_numpy(),
+                                    track_id=found["track_id"].to_numpy()))  # fmt: skip
         self.table = pd.concat(rows).reset_index(drop=True)
         self.labels = self.table["label"].to_numpy()
         self.train, self.gain_db = train, gain_db

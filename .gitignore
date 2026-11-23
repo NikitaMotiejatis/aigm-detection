@@ -20,5 +20,5 @@ outbox/
 .ruff_cache/
 graphify-out/
 
-
+!src/aigm/models
 !src/aigm/data
