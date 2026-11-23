@@ -6,10 +6,10 @@ Code for the course work "Detecting AI-Generated Music Using Neural Networks"
 This guide covers three things: setting up a machine, downloading the datasets, and running the
 experiments. The thesis text itself lives outside this repository (Overleaf / `thesis/` folder).
 
-**Status (2026-11-19):** setup, dataset download, the data layer (audit, conversion to the
-processed cache, splits, checksums) and the shared MLflow tracking server on the Proxmox host
-work; see section 4. Training and the experiments are not implemented yet; section 5 describes
-what is planned so that both of us build towards the same interface.
+**Status (2026-11-23):** setup, dataset download, the data layer, training and evaluation, the
+Docker image, run queue, model cache, outbox, registry and CI are implemented; see section 4.
+The experiments have not been run yet; section 5 lists them. Published numbers and upstream
+settings are in [docs/upstream.md](docs/upstream.md).
 
 ## 1. Machine setup
 
@@ -178,6 +178,45 @@ Set `MLFLOW_TRACKING_URI` first, otherwise runs go to a local MLflow store. Test
 before metrics are computed, and accuracy and F1 use the threshold of the validation EER. A run
 started from a working tree with uncommitted changes is tagged `dirty=true`.
 
+### Image and run queue (machine A)
+
+```bash
+make image                       # builds aigm:<commit>; about 10 GB, data is mounted at run time
+make submit EXP=smoke            # one CPU run in the image, logged to MLFLOW_TRACKING_URI
+make submit EXP=e1_indomain      # 3 models x 3 seeds
+make submit EXP=e1_indomain ARGS="--slots 2 --dry-run"
+```
+
+Sweeps are defined in `configs/sweeps.yaml`. Before each run the queue asks MLflow whether a
+finished run with the same config and seed exists on a clean commit, and skips it, so repeating
+the command resumes a sweep. Commit first: runs from an image with uncommitted changes are tagged
+`dirty=true` and do not count as finished. A failed run does not stop the sweep.
+
+### Registry, model cache and outbox
+
+```bash
+uv run aigm register e1_indomain --suffix fmc    # best run per model -> resnet18-fmc, ...
+uv run aigm pull                                 # cache current registry models in models/
+uv run aigm eval --model resnet18-fmc --testset fmc_test
+uv run aigm sync                                 # upload results waiting in outbox/
+```
+
+`aigm eval` writes its complete result to `outbox/` and then uploads it. If the server is
+unreachable, the result stays there until `aigm sync`, and models already in `models/` remain
+usable. Uploading the same entry twice creates one run.
+
+### Backup and read-only mirror
+
+```bash
+BACKUP_DISK=/mnt/e/aigm-detection scripts/mlflow_backup.sh   # machine A
+make mlflow-mirror                                           # machine B, http://localhost:5001
+make mlflow-mirror-down
+```
+
+The script takes a consistent snapshot of the server's database and artifacts into
+`mlflow-mirror/`, then copies it to the external disk and to machine B (`BACKUP_B`, default
+`aigm-b`). `make submit` runs it after each real sweep. The mirror is for browsing only.
+
 ### Tracking server
 
 One MLflow server holds all runs, artifacts and the model registry. It runs in an unprivileged
@@ -233,7 +272,7 @@ make mlflow-down    # stop it (runs are kept)
 
 Runs logged there stay on that machine and are not part of the shared results.
 
-## 5. Experiments (planned, not implemented yet)
+## 5. Experiments (not run yet)
 
 | # | Experiment | Data |
 |---|---|---|
@@ -244,7 +283,6 @@ Runs logged there stay on that machine and are not part of the shared results.
 | 5 | Robustness: pitch shift, time stretch, EQ, reverb, noise, 64 kbps MP3/AAC/Opus | test sets of 1–3 |
 | 6 | Attribution analysis (Grad-CAM, Integrated Gradients, Occlusion) of failure cases | failures from 2, 4, 5 |
 
-Planned pipeline: every run is a container started with `docker run --gpus all` that logs
-parameters, metrics and the model to one MLflow server. The 12 GB machine trains; the 8 GB
-machine runs evaluation and attribution; both reach MLflow on the Proxmox host over Tailscale. Commands
-for starting the stack and launching runs will be documented here once they exist.
+Every training run is a container started with `docker run --gpus all` that logs parameters,
+metrics and the model to one MLflow server. The 12 GB machine trains; the 8 GB machine runs
+evaluation and attribution; both reach MLflow on the Proxmox host over Tailscale.
