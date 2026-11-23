@@ -61,6 +61,23 @@ Two machines are used: an RTX 4070 SUPER (12 GB) and an RTX 3070 Laptop (8 GB).
    `%UserProfile%\.wslconfig`. To open the MLflow UI in a Windows browser, Tailscale must be
    installed on Windows as well; with it only inside WSL, `curl` works but the browser does not.
 
+   **Check the WSL network MTU.** If `eth0` in WSL has MTU 1280, Tailscale's encrypted packets do
+   not fit through it. Small requests such as `/health` and the UI still work, but uploads to
+   MLflow hang (a training run sits idle with almost no CPU use). Check and fix it:
+
+   ```bash
+   ip link show eth0                               # look for "mtu 1500"
+   sudo ip link set dev eth0 mtu 1500              # if it is lower
+   ping -c 3 -M do -s 1252 aigm-mlflow             # must get replies
+   ```
+
+   To keep the setting after a WSL restart, add this line to the existing `[boot]` section of
+   `/etc/wsl.conf` (do not add a second `[boot]`), then run `wsl --shutdown` from PowerShell:
+
+   ```ini
+   command = ip link set dev eth0 mtu 1500
+   ```
+
 ## 2. Datasets
 
 All data goes to `data/raw/` (ignored by git). Set `DATA_DIR=/some/path` to store it elsewhere.
