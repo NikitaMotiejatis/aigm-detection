@@ -14,3 +14,23 @@ services:
       --backend-store-uri sqlite:////mlflow/mlflow.db
       --serve-artifacts --artifacts-destination /mlflow/artifacts
       --allowed-hosts localhost*,127.0.0.1*,aigm-a,aigm-a:*,aigm-a.*,100.*
+
+  # Read-only view of the last backup (`make mlflow-mirror`, port 5001). The server works on a
+  # throwaway copy of the database, so nothing can change the mirror itself.
+  mlflow-mirror:
+    image: ghcr.io/mlflow/mlflow:v3.18.0
+    profiles: [mirror]
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./mlflow-mirror:/mirror:ro
+    tmpfs:
+      - /work
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        cp /mirror/mlflow.db /work/mlflow.db &&
+        exec mlflow server --host 0.0.0.0 --port 5000
+        --backend-store-uri sqlite:////work/mlflow.db
+        --serve-artifacts --artifacts-destination /mirror/artifacts
+        --allowed-hosts localhost*,127.0.0.1*,aigm-b,aigm-b:*,aigm-b.*,100.*
