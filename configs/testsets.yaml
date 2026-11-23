@@ -1,0 +1,14 @@
+# Named test sets for `aigm eval --testset <name>`. Split paths are relative to `data.root`.
+# `generators: null` keeps all; real clips are always kept. Echoes has no real class of its own.
+fmc_val: {splits: [splits/fmc_val.csv], sources: [fakemusiccaps, musiccaps]}
+fmc_test: {splits: [splits/fmc_test.csv], sources: [fakemusiccaps, musiccaps]}
+fma_test: {splits: [splits/fma_test.csv], sources: [fma_small]}
+echoes: {splits: [splits/echoes_test.csv], sources: [echoes]}
+echoes_vs_musiccaps:
+  splits: [splits/echoes_test.csv, splits/fmc_test.csv]
+  sources: [echoes, musiccaps]
+echoes_vs_fma:
+  splits: [splits/echoes_test.csv, splits/fma_test.csv]
+  sources: [echoes, fma_small]
+smoke_val: {splits: [splits/val.csv], sources: [synthetic]}
+smoke_test: {splits: [splits/test.csv], sources: [synthetic]}

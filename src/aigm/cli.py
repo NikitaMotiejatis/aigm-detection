@@ -72,6 +72,22 @@ def _data_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _train(args: argparse.Namespace) -> int:
+    from aigm.train import train
+
+    print(train(_config(args)))
+    return 0
+
+
+def _eval(args: argparse.Namespace) -> int:
+    from aigm.evaluate import evaluate_run
+
+    result = evaluate_run(args.run_id, args.testset, args.testsets, args.overrides)
+    for name, value in result.items():
+        print(f"{name}: {value:.6f}")
+    return 0
+
+
 def _add_config(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--config", default=DATA_CONFIG, help=f"default: {DATA_CONFIG}")
     parser.add_argument("overrides", nargs="*", metavar="key=value", help="config overrides")
@@ -113,6 +129,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--manifest", default=MANIFEST)
     _add_config(p)
     p.set_defaults(run=_data_verify)
+
+    p = sub.add_parser("train", help="train one configuration and log it to MLflow")
+    p.add_argument("--config", required=True)
+    p.add_argument("overrides", nargs="*", metavar="key=value", help="config overrides")
+    p.set_defaults(run=_train)
+
+    p = sub.add_parser("eval", help="evaluate a run's checkpoint on a named test set")
+    p.add_argument("--run", dest="run_id", required=True, help="MLflow run id of training")
+    p.add_argument("--testset", required=True)
+    p.add_argument("--testsets", default="configs/testsets.yaml")
+    p.add_argument("overrides", nargs="*", metavar="key=value", help="config overrides")
+    p.set_defaults(run=_eval)
     return parser
 
 

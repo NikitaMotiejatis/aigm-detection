@@ -1,0 +1,42 @@
+# Small CNN, one epoch, 64 synthetic clips, on CPU. Used by the tests and CI; needs no dataset.
+experiment: smoke
+seed: 0
+device: cpu
+processed_dir: outputs/smoke-data/processed
+manifest: outputs/smoke-data/CACHE.sha256
+
+data:
+  root: outputs/smoke-data
+  synthetic: true
+  train: [splits/train.csv]
+  val: [splits/val.csv]
+  sources: [synthetic]
+  train_generators: null
+  gain_db: 6
+  num_workers: 0
+
+model:
+  name: smallcnn
+  pretrained: false
+
+frontend:
+  sample_rate: 16000
+  n_fft: 2048
+  hop_length: 512
+  n_mels: 128
+  f_min: 20
+  f_max: 7000
+  top_db: 80
+  size: 224
+
+train:
+  epochs: 1
+  batch_size: 8
+  eval_batch_size: 8
+  lr: 0.001
+  weight_decay: 0.01
+  patience: 1
+  amp: false
+
+eval:
+  n_boot: 100

@@ -1,0 +1,48 @@
+# E1: in-domain detection on FakeMusicCaps + MusicCaps. Choose the model and seed on the command
+# line: `aigm train --config configs/e1_indomain.yaml model.name=mobilenet_v2 seed=1`.
+# For model.name=smallcnn also set model.pretrained=false.
+#
+# From the benchmark code (arXiv 2412.13421): ImageNet weights, lr 0.001, batch 64, 10 epochs,
+# n_fft 2048, hop 512, 128 mel bins, 224 x 224 input. Deliberate differences, set by PLAN.md:
+# AdamW with a cosine schedule (upstream: Adam, constant lr), a 7 kHz band limit, per-clip
+# standardisation, a balanced sampler, +-6 dB gain, and splits by YouTube id.
+experiment: e1_indomain
+seed: 0
+device: auto
+processed_dir: ${oc.env:PROCESSED_DIR,data/processed}
+manifest: splits/CACHE.sha256
+
+data:
+  root: .
+  train: [splits/fmc_train.csv]
+  val: [splits/fmc_val.csv]
+  sources: [fakemusiccaps, musiccaps]
+  train_generators: null       # null = all five
+  gain_db: 6
+  num_workers: 6
+
+model:
+  name: resnet18               # resnet18 | mobilenet_v2 | smallcnn
+  pretrained: true
+
+frontend:
+  sample_rate: 16000
+  n_fft: 2048
+  hop_length: 512
+  n_mels: 128
+  f_min: 20
+  f_max: 7000
+  top_db: 80
+  size: 224
+
+train:
+  epochs: 10
+  batch_size: 64
+  eval_batch_size: 64          # also has to fit in the 8 GB of machine B
+  lr: 0.001
+  weight_decay: 0.01
+  patience: 3                  # epochs without a better validation EER
+  amp: true
+
+eval:
+  n_boot: 1000

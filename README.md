@@ -61,6 +61,23 @@ Two machines are used: an RTX 4070 SUPER (12 GB) and an RTX 3070 Laptop (8 GB).
    `%UserProfile%\.wslconfig`. To open the MLflow UI in a Windows browser, Tailscale must be
    installed on Windows as well; with it only inside WSL, `curl` works but the browser does not.
 
+   **Check the WSL network MTU.** If `eth0` in WSL has MTU 1280, Tailscale's encrypted packets do
+   not fit through it. Small requests such as `/health` and the UI still work, but uploads to
+   MLflow hang (a training run sits idle with almost no CPU use). Check and fix it:
+
+   ```bash
+   ip link show eth0                               # look for "mtu 1500"
+   sudo ip link set dev eth0 mtu 1500              # if it is lower
+   ping -c 3 -M do -s 1252 aigm-mlflow             # must get replies
+   ```
+
+   To keep the setting after a WSL restart, add this line to the existing `[boot]` section of
+   `/etc/wsl.conf` (do not add a second `[boot]`), then run `wsl --shutdown` from PowerShell:
+
+   ```ini
+   command = ip link set dev eth0 mtu 1500
+   ```
+
 ## 2. Datasets
 
 All data goes to `data/raw/` (ignored by git). Set `DATA_DIR=/some/path` to store it elsewhere.
@@ -145,6 +162,21 @@ to `data/processed/` and run `uv run aigm data verify`; it must print `OK`.
 
 The split files in `splits/` are part of the repository and are never regenerated;
 `splits/SPLITS.md` lists what is in them.
+
+### Training and evaluation
+
+```bash
+uv run aigm train --config configs/smoke.yaml     # small CNN, 64 synthetic clips, CPU, no dataset
+uv run aigm train --config configs/e1_indomain.yaml seed=1
+uv run aigm train --config configs/e1_indomain.yaml model.name=mobilenet_v2
+uv run aigm train --config configs/e1_indomain.yaml model.name=smallcnn model.pretrained=false
+uv run aigm eval --run <mlflow run id> --testset fmc_test
+```
+
+Set `MLFLOW_TRACKING_URI` first, otherwise runs go to a local MLflow store. Test sets are named in
+`configs/testsets.yaml`. Scores are log-odds of "generated"; clip scores are averaged per track
+before metrics are computed, and accuracy and F1 use the threshold of the validation EER. A run
+started from a working tree with uncommitted changes is tagged `dirty=true`.
 
 ### Tracking server
 
